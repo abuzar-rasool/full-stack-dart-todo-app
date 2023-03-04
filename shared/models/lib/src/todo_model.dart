@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'package:equatable/equatable.dart';
 
 class TodoModel extends Equatable {
@@ -40,4 +41,18 @@ class TodoModel extends Equatable {
         status,
         description,
       ];
+
+  TodoModel copyWith({
+    int? id,
+    String? task,
+    String? description,
+    bool? status,
+  }) {
+    return TodoModel(
+      id: id ?? this.id,
+      task: task ?? this.task,
+      description: description ?? this.description,
+      status: status ?? this.status,
+    );
+  }
 }

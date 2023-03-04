@@ -1,192 +1,146 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/helpers/http_helper.dart';
+import 'package:frontend/widgets/todo_dialog.dart';
+import 'package:models/models.dart';
 
 void main() {
-  runApp(TodoApp());
-}
-
-class Todo {
-  final String title;
-  final String description;
-  bool isCompleted;
-
-  Todo({
-    required this.title,
-    required this.description,
-    this.isCompleted = false,
-  });
+  runApp(const MaterialApp(home: TodoApp()));
 }
 
 class TodoApp extends StatefulWidget {
+  const TodoApp({super.key});
   @override
-  _TodoAppState createState() => _TodoAppState();
+  TodoAppState createState() => TodoAppState();
 }
 
-class _TodoAppState extends State<TodoApp> {
-  final List<Todo> _todos = [];
+class TodoAppState extends State<TodoApp> {
+  bool loading = true;
+  List<TodoModel> _todos = [];
 
-  final TextEditingController _titleTextEditingController = TextEditingController();
-  final TextEditingController _descriptionTextEditingController = TextEditingController();
+  @override
+  void initState() {
+    _getTodos();
+    super.initState();
+  }
 
-  void _addTodo() {
-    final title = _titleTextEditingController.text.trim();
-    final description = _descriptionTextEditingController.text.trim();
-    if (title.isNotEmpty && description.isNotEmpty) {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Todo List'),
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : _todos.isEmpty
+              ? const Center(
+                  child: Text('No Todos'),
+                )
+              : ListView.builder(
+                  itemCount: _todos.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final todo = _todos[index];
+                    return Dismissible(
+                      key: Key(todo.id.toString()),
+                      onDismissed: (_) => _deleteTodoAtIndex(index),
+                      background: Container(
+                        color: Colors.red,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      child: ListTile(
+                        leading: Checkbox(
+                          value: todo.status ?? false,
+                          onChanged: (_) => _toggleTodoAtIndex(index),
+                        ),
+                        title: Text(
+                          todo.task,
+                          style: TextStyle(
+                            decoration: (todo.status ?? false) ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                        subtitle: Text(todo.description),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _showEditTodoDialog(context, todo, index),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () async {
+          await _showAddTodoDialog(context);
+        },
+      ),
+    );
+  }
+
+  Future<void> _getTodos() async {
+    _todos = [];
+    try {
+      final respose = await HttpHelper.instance.get<List<dynamic>?>('/todos');
+      final todos = respose.data!.map((e) => TodoModel.fromMap(e as Map<String, dynamic>)).toList();
       setState(() {
-        _todos.add(Todo(title: title, description: description));
+        _todos.addAll(todos);
+        loading = false;
       });
-      _titleTextEditingController.clear();
-      _descriptionTextEditingController.clear();
+    } catch (e) {
+      setState(() {
+        loading = false;
+      });
     }
   }
 
-  void _updateTodoAtIndex(int index, Todo updatedTodo) {
-    setState(() {
-      _todos[index] = updatedTodo;
-    });
-  }
-
-  void _deleteTodoAtIndex(int index) {
-    setState(() {
-      _todos.removeAt(index);
-    });
-  }
-
-  void _toggleTodoAtIndex(int index) {
-    setState(() {
-      _todos[index].isCompleted = !_todos[index].isCompleted;
-    });
-  }
-
-  void _showEditTodoDialog(BuildContext context, Todo todo) {
-    final titleController = TextEditingController(text: todo.title);
-    final descriptionController = TextEditingController(text: todo.description);
-
-    showDialog(
+  Future<void> _showAddTodoDialog(BuildContext context) async {
+    await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Todo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                ),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: const Text('Save'),
-              onPressed: () {
-                final updatedTodo = Todo(
-                  title: titleController.text.trim(),
-                  description: descriptionController.text.trim(),
-                  isCompleted: todo.isCompleted,
-                );
-                _updateTodoAtIndex(_todos.indexOf(todo), updatedTodo);
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        return TodoDialog(
+          onUpdate: (todo) {
+            setState(() {
+              _todos.add(todo);
+            });
+          },
         );
       },
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Todo List'),
-        ),
-        body: _todos.isEmpty
-            ? const Center(
-                child: Text('No Todos'),
-              )
-            : ListView.builder(
-                itemCount: _todos.length,
-                itemBuilder: (BuildContext context, int index) {
-                  final todo = _todos[index];
-                  return ListTile(
-                    leading: Checkbox(
-                      value: todo.isCompleted,
-                      onChanged: (_) => _toggleTodoAtIndex(index),
-                    ),
-                    title: Text(
-                      todo.title,
-                      style: TextStyle(
-                        decoration: todo.isCompleted ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    subtitle: Text(todo.description),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () => _showEditTodoDialog(context, todo),
-                    ),
-                  );
-                },
-              ),
-        floatingActionButton: FloatingActionButton(
-          child: const Icon(Icons.add),
-          onPressed: () {
-            print("Add Todo");
-            _showAddTodoDialog(context);
-          },
-        ),
-      ),
-    );
+  void _deleteTodoAtIndex(int index) {
+    HttpHelper.instance.delete('/todos', {'id': _todos[index].id});
+    setState(() {
+      _todos.removeAt(index);
+    });
   }
 
-  void _showAddTodoDialog(BuildContext context) {
+  Future<TodoModel> _updateTodo(TodoModel todoModel) async {
+    final response = await HttpHelper.instance.put<Map<String, dynamic>?>('/todos', todoModel.toMap());
+    return TodoModel.fromMap(response.data!);
+  }
+
+  void _toggleTodoAtIndex(int index) {
+    setState(() {
+      bool status = _todos[index].status ?? false;
+      _todos[index] = _todos[index].copyWith(status: !status);
+      _updateTodo(_todos[index]);
+    });
+  }
+
+  void _showEditTodoDialog(BuildContext context, TodoModel todo, int index) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Add Todo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _titleTextEditingController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                ),
-              ),
-              TextField(
-                controller: _descriptionTextEditingController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: const Text('Add'),
-              onPressed: () {
-                _addTodo();
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        return TodoDialog(
+          onUpdate: (todo) {
+            setState(() {
+              _todos[index] = todo;
+            });
+          },
+          todoModel: todo,
         );
       },
     );
